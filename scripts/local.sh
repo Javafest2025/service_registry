@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Service Registry Local Development Script
-# This script provides commands to build, run, and test the Spring Boot service registry
+# This script provides commands to build, run, test, and manage the Spring Boot service registry
 
 set -e  # Exit on any error
 
@@ -10,6 +10,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
@@ -17,6 +18,7 @@ APP_NAME="service_registry"
 JAR_NAME="service_registry-0.0.1-SNAPSHOT.jar"
 DEFAULT_PORT=8761
 PID_FILE="service_registry.pid"
+LOG_FILE="service_registry.log"
 
 # Function to print colored output
 print_status() {
@@ -61,9 +63,32 @@ check_maven() {
     print_success "Maven version: $(mvn -version | head -n 1)"
 }
 
+# Function to format code
+format() {
+    print_status "Formatting code..."
+    
+    # Check if spotless is available
+    if mvn help:evaluate -Dexpression=plugin.artifactId -q -DforceStdout | grep -q "spotless-maven-plugin"; then
+        if ! mvn spotless:check; then
+            print_status "Applying code format..."
+            mvn spotless:apply || {
+                print_error "Formatting failed."
+                exit 1
+            }
+        else
+            print_success "Code format is up to date."
+        fi
+    else
+        print_warning "Spotless plugin not found. Skipping code formatting."
+    fi
+}
+
 # Function to build the application
 build() {
     print_status "Building $APP_NAME..."
+    
+    # Format code first
+    format
     
     # Clean and compile
     mvn clean compile
@@ -75,6 +100,13 @@ build() {
     mvn package -DskipTests
     
     print_success "Build completed successfully!"
+}
+
+# Function to run tests
+test() {
+    print_status "Running tests..."
+    mvn test
+    print_success "Tests completed!"
 }
 
 # Function to run the application
@@ -96,19 +128,19 @@ run() {
     fi
     
     # Start the application
-    nohup java -jar target/$JAR_NAME --server.port=$port > service_registry.log 2>&1 &
+    nohup mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dserver.port=$port" > "$LOG_FILE" 2>&1 &
     local pid=$!
     echo $pid > "$PID_FILE"
     
     print_success "Application started with PID $pid"
-    print_status "Logs are being written to service_registry.log"
+    print_status "Logs are being written to $LOG_FILE"
     print_status "Eureka dashboard will be available at http://localhost:$port"
     
     # Wait a moment and check if it started successfully
-    sleep 3
+    sleep 5
     if ! ps -p "$pid" > /dev/null 2>&1; then
         print_error "Application failed to start. Check logs:"
-        tail -n 20 service_registry.log
+        tail -n 20 "$LOG_FILE"
         rm -f "$PID_FILE"
         exit 1
     fi
@@ -161,18 +193,11 @@ status() {
 
 # Function to show logs
 logs() {
-    if [ -f "service_registry.log" ]; then
-        tail -f service_registry.log
+    if [ -f "$LOG_FILE" ]; then
+        tail -f "$LOG_FILE"
     else
         print_warning "No log file found. Application may not have been started."
     fi
-}
-
-# Function to run tests
-test() {
-    print_status "Running tests..."
-    mvn test
-    print_success "Tests completed!"
 }
 
 # Function to clean up
@@ -180,7 +205,7 @@ clean() {
     print_status "Cleaning up..."
     stop
     mvn clean
-    rm -f service_registry.log
+    rm -f "$LOG_FILE"
     print_success "Cleanup completed!"
 }
 
@@ -191,18 +216,21 @@ show_help() {
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo ""
     echo "Commands:"
-    echo "  build                    Build the application (clean, compile, test, package)"
+    echo "  format                   Format code using Spotless"
+    echo "  build                    Build the application (format, clean, compile, test, package)"
+    echo "  test                     Run tests only"
     echo "  run [PORT]              Start the application (default port: $DEFAULT_PORT)"
     echo "  stop                    Stop the application"
     echo "  restart [PORT]          Restart the application"
     echo "  status                  Show application status"
     echo "  logs                    Show application logs (follow mode)"
-    echo "  test                    Run tests only"
     echo "  clean                   Stop app, clean build artifacts and logs"
     echo "  help                    Show this help message"
     echo ""
     echo "Examples:"
+    echo "  $0 format"
     echo "  $0 build"
+    echo "  $0 test"
     echo "  $0 run"
     echo "  $0 run 8762"
     echo "  $0 restart"
@@ -219,8 +247,14 @@ main() {
     check_maven
     
     case "${1:-help}" in
+        "format")
+            format
+            ;;
         "build")
             build
+            ;;
+        "test")
+            test
             ;;
         "run")
             run "$2"
@@ -236,9 +270,6 @@ main() {
             ;;
         "logs")
             logs
-            ;;
-        "test")
-            test
             ;;
         "clean")
             clean
