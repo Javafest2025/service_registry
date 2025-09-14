@@ -1,0 +1,59 @@
+services:
+  service-registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scholar-service-registry
+
+    # 🏷️ Add metadata labels for cleanup & observability
+    labels:
+      service: "service-registry"
+      maintainer: "ScholarAI <dev@scholarai.local>"
+      version: "0.0.1-SNAPSHOT"
+      description: "Spring Boot Eureka Service Registry for ScholarAI"
+
+    # Small, predictable footprint
+    cpus: 0.5
+    mem_limit: 512m
+    mem_reservation: 256m
+    pids_limit: 256
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    # Container-aware JVM sizing & a few GC niceties
+    environment:
+      - JAVA_TOOL_OPTIONS=-XX:InitialRAMPercentage=20 -XX:MaxRAMPercentage=60 -XX:+UseStringDeduplication -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError
+      # Keep the embedded web server modest
+      - SERVER_TOMCAT_MAX_THREADS=40
+      - SERVER_TOMCAT_MAX_CONNECTIONS=100
+      - SERVER_TOMCAT_ACCEPT_COUNT=40
+
+    ports:
+      - "8761:8761"
+
+    networks:
+      - scholarai-network
+
+    restart: unless-stopped
+
+    # Keep your curl-based healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # Prevent log growth from eating disk/mem
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  scholarai-network:
+    external: true
+    name: docker_scholarai-network

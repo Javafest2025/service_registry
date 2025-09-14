@@ -25,6 +25,12 @@ RUN ./mvnw clean package -DskipTests
 # Stage 2: Runtime image
 FROM eclipse-temurin:21-jre
 
+# 🏷️ Add labels for cleanup + metadata
+LABEL maintainer="ScholarAI <dev@scholarai.local>" \
+      service="service-registry" \
+      version="0.0.1-SNAPSHOT" \
+      description="Spring Boot Eureka Service Registry for ScholarAI"
+
 # Install curl for health checks (minimal installation)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
