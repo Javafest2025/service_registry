@@ -1,4 +1,4 @@
-# Multi-stage build for Service Registry
+# Multi-stage build for Service  Registry
 # Stage 1: Build the application
 FROM eclipse-temurin:21-jdk AS builder
 
